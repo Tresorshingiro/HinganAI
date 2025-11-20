@@ -1,90 +1,179 @@
-# Environment variables
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+# Environment variables# Environment variables
 
-# Backend specific
-backend/.env
-backend/.env.*
-backend/venv/
-backend/env/
-backend/__pycache__/
-backend/*.py[cod]
-backend/uploads/temp/
-backend/.vscode/
-backend/.idea/
+.env.env
 
-# Frontend specific
-frontend/.env
-frontend/.env.*
-frontend/node_modules/
-frontend/dist/
-frontend/build/
-frontend/.vscode/
-frontend/.idea/
+.env.local.env.local
 
-# Python cache files
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
+.env.development.local.env.development.local
 
-# Virtual environments
-venv/
-env/
-ENV/
-.venv/
-.ENV/
-*/venv/
-*/env/
+.env.test.local.env.test.local
 
-# Node.js
-node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-package-lock.json
-*.tgz
-*.tar.gz
+.env.production.local.env.production.local
 
-# Build outputs
-dist/
-build/
-out/
 
-# IDE files
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
 
-# OS generated files
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
+# Backend specific# Backend specific
 
-# Logs
-*.log
-logs/
+backend/.envbackend/.env
 
-# Temporary files
-*.tmp
-temp/
+backend/.env.*backend/.env.*
 
-# Supabase
-supabase/.env
-supabase/.env.*
+backend/venv/backend/venv/
 
-# Large datasets (exclude from git)
-backend/Dataset/
+backend/env/backend/env/
 
-# Keep small essential files, exclude large ones
-backend/models/model.h5
-backend/data/*.csv
+backend/__pycache__/backend/__pycache__/
+
+backend/*.py[cod]backend/*.py[cod]
+
+backend/uploads/temp/backend/uploads/temp/
+
+backend/.vscode/backend/.vscode/
+
+backend/.idea/backend/.idea/
+
+
+
+# Frontend specific# Frontend specific
+
+frontend/.envfrontend/.env
+
+frontend/.env.*frontend/.env.*
+
+frontend/node_modules/frontend/node_modules/
+
+frontend/dist/frontend/dist/
+
+frontend/build/frontend/build/
+
+frontend/.vscode/frontend/.vscode/
+
+frontend/.idea/frontend/.idea/
+
+
+
+# Python cache files# Python cache files
+
+__pycache__/__pycache__/
+
+*.py[cod]*.py[cod]
+
+*$py.class*$py.class
+
+*.so*.so
+
+
+
+# Virtual environments# Virtual environments
+
+venv/venv/
+
+env/env/
+
+ENV/ENV/
+
+.venv/.venv/
+
+.ENV/.ENV/
+
+*/venv/*/venv/
+
+*/env/*/env/
+
+
+
+# Node.js# Node.js
+
+node_modules/node_modules/
+
+npm-debug.log*npm-debug.log*
+
+yarn-debug.log*yarn-debug.log*
+
+yarn-error.log*yarn-error.log*
+
+package-lock.jsonpackage-lock.json
+
+*.tgz*.tgz
+
+*.tar.gz*.tar.gz
+
+
+
+# Build outputs# Build outputs
+
+dist/dist/
+
+build/build/
+
+out/out/
+
+
+
+# IDE files# IDE files
+
+.vscode/.vscode/
+
+.idea/.idea/
+
+*.swp*.swp
+
+*.swo*.swo
+
+*~*~
+
+
+
+# OS generated files# OS generated files
+
+.DS_Store.DS_Store
+
+.DS_Store?.DS_Store?
+
+._*._*
+
+.Spotlight-V100.Spotlight-V100
+
+.Trashes.Trashes
+
+ehthumbs.dbehthumbs.db
+
+Thumbs.dbThumbs.db
+
+
+
+# Logs# Logs
+
+*.log*.log
+
+logs/logs/
+
+
+
+# Temporary files# Temporary files
+
+*.tmp*.tmp
+
+temp/temp/
+
+
+
+# Supabase# Supabase
+
+supabase/.envsupabase/.env
+
+supabase/.env.*supabase/.env.*
+
+
+
+# Large datasets (exclude from git)# Large datasets (exclude from git)
+
+backend/Dataset/backend/Dataset/
+
+
+
+# Keep small essential files, exclude large ones# Keep small essential files, exclude large ones
+
+backend/models/model.h5backend/models/model.h5
+
+backend/data/*.csvbackend/data/*.csv
