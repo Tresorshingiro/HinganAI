@@ -18,7 +18,22 @@ from dotenv import load_dotenv
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app, origins=["http://localhost:3000", "http://localhost:5173", "http://localhost:8080", "http://localhost:8081"])  # Enable CORS for React
+
+# CORS configuration - allow frontend origins
+allowed_origins = [
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "http://localhost:8080",
+    "http://localhost:8081",
+    "https://hingan-ai.vercel.app",  # Production frontend
+    "https://hingan-ai-*.vercel.app"  # Preview deployments
+]
+
+CORS(app, 
+     origins=allowed_origins,
+     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+     allow_headers=["Content-Type", "Authorization"],
+     supports_credentials=True)
 
 # Configuration
 app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'your-secret-key-here')
@@ -105,6 +120,14 @@ CROP_DICT = {
 DISEASE_LABELS = {0: 'Healthy', 1: 'Powdery', 2: 'Rust'}
 
 # API Routes
+
+@app.route('/health')
+def health():
+    """Health check endpoint for Render"""
+    return jsonify({
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat()
+    }), 200
 
 @app.route('/')
 def home():
