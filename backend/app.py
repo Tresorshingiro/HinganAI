@@ -3,12 +3,13 @@ import numpy as np
 import pandas as pd
 import pickle
 import requests
+import time
 from datetime import datetime
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 from PIL import Image
-from tensorflow.keras.models import load_model
+import tensorflow as tf
 from tensorflow.keras.preprocessing.image import load_img, img_to_array
 from supabase import create_client, Client
 from dotenv import load_dotenv
@@ -42,7 +43,7 @@ MODEL_PATHS = {
     'crop_recommendation': 'models/model.pkl',
     'crop_scaler': 'models/standscaler.pkl',
     'crop_minmax': 'models/minmaxscaler.pkl',
-    'disease_detection': 'models/model.h5',
+    'disease_detection': 'models/model.tflite',  # Changed to TFLite
     'crop_yield': 'models/dtr.pkl',
     'crop_yield_preprocessor': 'models/preprocesser.pkl',
     'fertilizer': 'models/fertilizer_model.pkl',
@@ -64,10 +65,13 @@ def load_models():
             models['crop_minmax'] = pickle.load(open(MODEL_PATHS['crop_minmax'], 'rb'))
             print("✅ Crop recommendation model loaded")
         
-        # Disease detection model
+        # Disease detection model (TFLite)
         if os.path.exists(MODEL_PATHS['disease_detection']):
-            models['disease_model'] = load_model(MODEL_PATHS['disease_detection'])
-            print("✅ Disease detection model loaded")
+            models['disease_interpreter'] = tf.lite.Interpreter(model_path=MODEL_PATHS['disease_detection'])
+            models['disease_interpreter'].allocate_tensors()
+            models['disease_input_details'] = models['disease_interpreter'].get_input_details()
+            models['disease_output_details'] = models['disease_interpreter'].get_output_details()
+            print("✅ Disease detection model (TFLite) loaded")
         
         # Crop yield prediction model
         if os.path.exists(MODEL_PATHS['crop_yield']):
@@ -161,24 +165,32 @@ def predict_crop():
         if prediction[0] in CROP_DICT:
             recommended_crop = CROP_DICT[prediction[0]]
             
-            # Save to Supabase if available and user_id provided
+            # Save to Supabase if available and user_id provided (with retry)
             if supabase and user_id:
-                try:
-                    supabase.table('crop_recommendations').insert({
-                        'user_id': user_id,
-                        'nitrogen': N,
-                        'phosphorus': P,
-                        'potassium': K,
-                        'temperature': temp,
-                        'humidity': humidity,
-                        'ph_level': ph,
-                        'rainfall': rainfall,
-                        'recommended_crop': recommended_crop,
-                        'confidence_score': float(confidence),
-                        'created_at': datetime.now().isoformat()
-                    }).execute()
-                except Exception as e:
-                    print(f"Error saving to database: {e}")
+                max_retries = 3
+                for attempt in range(max_retries):
+                    try:
+                        supabase.table('crop_recommendations').insert({
+                            'user_id': user_id,
+                            'nitrogen': N,
+                            'phosphorus': P,
+                            'potassium': K,
+                            'temperature': temp,
+                            'humidity': humidity,
+                            'ph_level': ph,
+                            'rainfall': rainfall,
+                            'recommended_crop': recommended_crop,
+                            'confidence_score': float(confidence),
+                            'created_at': datetime.now().isoformat()
+                        }).execute()
+                        print(f"✅ Crop recommendation saved to database for user {user_id}")
+                        break
+                    except Exception as e:
+                        if attempt < max_retries - 1:
+                            print(f"⚠️ Database save attempt {attempt + 1} failed: {e}. Retrying...")
+                            time.sleep(1)
+                        else:
+                            print(f"❌ Error saving to database after {max_retries} attempts: {e}")
             
             return jsonify({
                 'success': True,
@@ -209,7 +221,7 @@ def detect_disease():
         if file.filename == '':
             return jsonify({'success': False, 'error': 'No file selected'}), 400
         
-        if 'disease_model' not in models:
+        if 'disease_interpreter' not in models:
             return jsonify({'success': False, 'error': 'Disease detection model not available'}), 500
             
         if file:
@@ -221,39 +233,55 @@ def detect_disease():
             file.save(file_path)
             
             try:
-                # Process image and make prediction
+                # Process image and make prediction with TFLite
                 img = load_img(file_path, target_size=(225, 225))
                 x = img_to_array(img)
                 x = x.astype('float32') / 255.0
                 x = np.expand_dims(x, axis=0)
                 
-                predictions = models['disease_model'].predict(x)[0]
+                # Run TFLite inference
+                interpreter = models['disease_interpreter']
+                input_details = models['disease_input_details']
+                output_details = models['disease_output_details']
+                
+                interpreter.set_tensor(input_details[0]['index'], x)
+                interpreter.invoke()
+                predictions = interpreter.get_tensor(output_details[0]['index'])[0]
+                
                 predicted_class = np.argmax(predictions)
                 confidence = float(predictions[predicted_class])
                 disease = DISEASE_LABELS[predicted_class]
                 
                 # Generate treatment advice
-                treatment_advice = get_treatment_advice(disease)
+                treatment_data = get_treatment_advice(disease)
                 
-                # Save to Supabase if available
+                # Save to Supabase if available (with retry for network issues)
                 if supabase and user_id:
-                    try:
-                        supabase.table('disease_detections').insert({
-                            'user_id': user_id,
-                            'image_url': filename,
-                            'detected_disease': disease,
-                            'confidence': confidence,
-                            'treatment_advice': treatment_advice,
-                            'created_at': datetime.now().isoformat()
-                        }).execute()
-                    except Exception as e:
-                        print(f"Error saving to database: {e}")
+                    max_retries = 3
+                    for attempt in range(max_retries):
+                        try:
+                            supabase.table('disease_detections').insert({
+                                'user_id': user_id,
+                                'detected_disease': disease,
+                                'confidence_score': confidence,
+                                'created_at': datetime.now().isoformat()
+                            }).execute()
+                            print(f"✅ Disease detection saved to database for user {user_id}")
+                            break
+                        except Exception as e:
+                            if attempt < max_retries - 1:
+                                print(f"⚠️ Database save attempt {attempt + 1} failed: {e}. Retrying...")
+                                time.sleep(1)  # Wait 1 second before retry
+                            else:
+                                print(f"❌ Error saving to database after {max_retries} attempts: {e}")
                 
                 return jsonify({
                     'success': True,
                     'disease': disease,
                     'confidence': confidence,
-                    'treatment_advice': treatment_advice,
+                    'treatment_advice': treatment_data['advice'],
+                    'recommended_products': treatment_data['products'],
+                    'prevention_tips': treatment_data['prevention'],
                     'severity': get_severity_level(confidence, disease)
                 })
                 
@@ -270,11 +298,58 @@ def detect_disease():
 def get_treatment_advice(disease):
     """Generate treatment advice based on detected disease"""
     treatments = {
-        'Healthy': 'Your plant appears healthy! Continue with regular care: proper watering, adequate sunlight, and periodic monitoring for any changes.',
-        'Powdery': 'Powdery mildew detected. Treatment: 1) Apply fungicide (neem oil or baking soda solution), 2) Remove affected leaves, 3) Improve air circulation, 4) Avoid overhead watering, 5) Apply in early morning or evening.',
-        'Rust': 'Plant rust detected. Treatment: 1) Apply copper-based fungicide, 2) Remove infected plant parts immediately, 3) Ensure good drainage, 4) Avoid watering leaves directly, 5) Consider resistant varieties for future planting.'
+        'Healthy': {
+            'advice': 'Your plant appears healthy! Continue with regular care and monitoring.',
+            'products': [
+                {'name': 'Balanced NPK Fertilizer', 'type': 'Preventive', 'application': 'Apply as per crop requirements'}
+            ],
+            'prevention': [
+                'Maintain proper plant spacing for air circulation',
+                'Water early in the day to allow leaves to dry',
+                'Remove any dead or diseased plant material',
+                'Monitor plants regularly for early disease detection'
+            ]
+        },
+        'Powdery': {
+            'advice': 'Powdery mildew detected. This fungal disease appears as white powdery spots on leaves. Treat immediately to prevent spread.',
+            'products': [
+                {'name': 'Sulfur-based Fungicide', 'type': 'Fungicide', 'application': 'Spray on affected areas, repeat every 7-14 days'},
+                {'name': 'Neem Oil', 'type': 'Organic', 'application': 'Mix with water and spray weekly'},
+                {'name': 'Baking Soda Solution', 'type': 'Home Remedy', 'application': '1 tablespoon per gallon of water, spray leaves'}
+            ],
+            'prevention': [
+                'Improve air circulation around plants',
+                'Avoid overhead watering',
+                'Remove and destroy infected plant parts',
+                'Apply preventive fungicide during humid conditions',
+                'Plant resistant varieties when available'
+            ]
+        },
+        'Rust': {
+            'advice': 'Rust disease detected. This fungal infection causes orange-brown pustules on leaves. Early treatment is crucial.',
+            'products': [
+                {'name': 'Copper-based Fungicide', 'type': 'Fungicide', 'application': 'Apply every 7-10 days until symptoms disappear'},
+                {'name': 'Mancozeb', 'type': 'Fungicide', 'application': 'Spray thoroughly covering all leaf surfaces'},
+                {'name': 'Triazole Fungicides', 'type': 'Systemic', 'application': 'Follow manufacturer instructions'}
+            ],
+            'prevention': [
+                'Remove infected leaves immediately',
+                'Avoid working with plants when wet',
+                'Ensure good drainage',
+                'Space plants properly for air flow',
+                'Rotate crops annually',
+                'Use disease-free seeds and transplants'
+            ]
+        }
     }
-    return treatments.get(disease, 'Disease detected. Consult with agricultural extension services for proper diagnosis and treatment recommendations.')
+    
+    default = {
+        'advice': 'Disease detected. Consult with agricultural extension services for proper diagnosis and treatment.',
+        'products': [],
+        'prevention': ['Maintain good plant hygiene', 'Monitor plants regularly']
+    }
+    
+    return treatments.get(disease, default)
 
 def get_severity_level(confidence, disease):
     """Determine severity level based on confidence and disease type"""
@@ -308,7 +383,7 @@ def predict_crop_yield():
         rainfall = float(data['average_rain_fall_mm_per_year'])
         pesticides = float(data['pesticides_tonnes'])
         temp = float(data['avg_temp'])
-        area = float(data['Area'])
+        area = data['Area']  # This is country name (string), not a number
         item = data['Item']
         user_id = data.get('user_id')
         
@@ -322,35 +397,43 @@ def predict_crop_yield():
         prediction = models['yield_model'].predict(transformed_features)
         predicted_yield = float(prediction[0])
         
-        # Save to Supabase if available
+        # Save to Supabase if available (with retry)
         if supabase and user_id:
-            try:
-                supabase.table('crop_yield_predictions').insert({
-                    'user_id': user_id,
-                    'year': year,
-                    'rainfall': rainfall,
-                    'pesticides_used': pesticides,
-                    'temperature': temp,
-                    'area': area,
-                    'crop_type': item,
-                    'predicted_yield': predicted_yield,
-                    'created_at': datetime.now().isoformat()
-                }).execute()
-            except Exception as e:
-                print(f"Error saving to database: {e}")
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    supabase.table('yield_predictions').insert({
+                        'user_id': user_id,
+                        'year': year,
+                        'average_rainfall': rainfall,
+                        'pesticides_usage': pesticides,
+                        'average_temperature': temp,
+                        'area': area,
+                        'crop_item': item,
+                        'predicted_yield': predicted_yield,
+                        'created_at': datetime.now().isoformat()
+                    }).execute()
+                    print(f"✅ Yield prediction saved to database for user {user_id}")
+                    break
+                except Exception as e:
+                    if attempt < max_retries - 1:
+                        print(f"⚠️ Database save attempt {attempt + 1} failed: {e}. Retrying...")
+                        time.sleep(1)
+                    else:
+                        print(f"❌ Error saving to database after {max_retries} attempts: {e}")
         
         return jsonify({
             'success': True,
             'predicted_yield': predicted_yield,
             'crop_type': item,
             'area': area,
-            'yield_per_hectare': predicted_yield / area if area > 0 else 0,
-            'message': f'Predicted yield for {item}: {predicted_yield:.2f} tons',
+            'message': f'Predicted yield for {item} in {area}: {predicted_yield:.2f} hg/ha',
             'factors': {
                 'year': year,
                 'rainfall': rainfall,
                 'pesticides_used': pesticides,
-                'temperature': temp
+                'temperature': temp,
+                'country': area
             }
         })
         
@@ -396,26 +479,33 @@ def recommend_fertilizer():
         # Get fertilizer advice
         fertilizer_advice = get_fertilizer_advice(predicted_fertilizer, data)
         
-        # Save to Supabase if available
+        # Save to Supabase if available (with retry)
         if supabase and user_id:
-            try:
-                supabase.table('fertilizer_recommendations').insert({
-                    'user_id': user_id,
-                    'temperature': float(data['Temparature']),
-                    'humidity': float(data['Humidity ']),
-                    'moisture': float(data['Moisture']),
-                    'soil_type': data['Soil Type'],
-                    'crop_type': data['Crop Type'],
-                    'nitrogen': float(data['Nitrogen']),
-                    'potassium': float(data['Potassium']),
-                    'phosphorous': float(data['Phosphorous']),
-                    'recommended_fertilizer': predicted_fertilizer,
-                    'confidence': confidence,
-                    'advice': fertilizer_advice,
-                    'created_at': datetime.now().isoformat()
-                }).execute()
-            except Exception as e:
-                print(f"Error saving to database: {e}")
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    supabase.table('fertilizer_recommendations').insert({
+                        'user_id': user_id,
+                        'temperature': float(data['Temparature']),
+                        'humidity': float(data['Humidity ']),
+                        'moisture': float(data['Moisture']),
+                        'soil_type': data['Soil Type'],
+                        'crop_type': data['Crop Type'],
+                        'nitrogen': float(data['Nitrogen']),
+                        'potassium': float(data['Potassium']),
+                        'phosphorous': float(data['Phosphorous']),
+                        'recommended_fertilizer': predicted_fertilizer,
+                        'confidence_score': confidence,
+                        'created_at': datetime.now().isoformat()
+                    }).execute()
+                    print(f"✅ Fertilizer recommendation saved to database for user {user_id}")
+                    break
+                except Exception as e:
+                    if attempt < max_retries - 1:
+                        print(f"⚠️ Database save attempt {attempt + 1} failed: {e}. Retrying...")
+                        time.sleep(1)
+                    else:
+                        print(f"❌ Error saving to database after {max_retries} attempts: {e}")
         
         return jsonify({
             'success': True,

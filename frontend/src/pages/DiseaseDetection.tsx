@@ -1,11 +1,13 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { diseaseService } from '@/lib/database';
+import { supabase } from '@/lib/supabase';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
 import { 
   Camera, 
   Upload, 
@@ -13,8 +15,18 @@ import {
   AlertTriangle, 
   CheckCircle, 
   X,
-  Image as ImageIcon
+  Image as ImageIcon,
+  History,
+  Calendar,
+  Bug
 } from 'lucide-react';
+
+interface DiseaseDetection {
+  id: string;
+  detected_disease: string;
+  confidence_score: number;
+  created_at: string;
+}
 
 export default function DiseaseDetection() {
   const { user } = useAuth();
@@ -25,6 +37,36 @@ export default function DiseaseDetection() {
   const [result, setResult] = useState<any>(null);
   const [cropType, setCropType] = useState('');
   const [notes, setNotes] = useState('');
+  const [history, setHistory] = useState<DiseaseDetection[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+
+  const loadHistory = useCallback(async () => {
+    if (!user) return;
+    
+    setLoadingHistory(true);
+    try {
+      const { data, error } = await supabase
+        .from('disease_detections')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      if (error) throw error;
+      setHistory(data || []);
+    } catch (error) {
+      console.error('Error loading history:', error);
+    } finally {
+      setLoadingHistory(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (user) {
+      loadHistory();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -57,40 +99,45 @@ export default function DiseaseDetection() {
 
     setLoading(true);
     try {
-      // TODO: Upload image and call ML backend
-      // For now, simulate the API call
-      await new Promise(resolve => setTimeout(resolve, 2000)); // Simulate processing
+      // Create FormData to send image to backend
+      const formData = new FormData();
+      formData.append('file', selectedImage);
+      formData.append('user_id', user.id);
+      if (cropType) formData.append('crop_type', cropType);
+      if (notes) formData.append('notes', notes);
 
-      const mockResult = {
-        detected_disease: 'Leaf Blight',
-        confidence_score: 0.92,
-        severity_level: 'Medium',
-        affected_part: 'Leaves',
-        treatment_advice: 'Apply fungicide spray every 7-10 days. Remove affected leaves and ensure proper drainage.',
-        recommended_products: [
-          { name: 'Copper Fungicide', type: 'Chemical', application: 'Foliar spray' },
-          { name: 'Neem Oil', type: 'Organic', application: 'Foliar spray' }
-        ],
-        prevention_tips: [
-          'Maintain proper plant spacing for air circulation',
-          'Water at soil level to avoid wetting leaves',
-          'Remove plant debris regularly'
-        ]
-      };
+      // Call backend API
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+      const response = await fetch(`${backendUrl}/api/disease-detection`, {
+        method: 'POST',
+        body: formData,
+      });
 
-      // Save to database
-      const imageUrl = await diseaseService.uploadImage(user.id, selectedImage);
-      await diseaseService.createDetection(
-        user.id,
-        imageUrl,
-        selectedImage.name,
-        mockResult,
-        { crop_type: cropType, notes }
-      );
+      if (!response.ok) {
+        throw new Error('Failed to analyze image');
+      }
 
-      setResult(mockResult);
+      const data = await response.json();
+
+      if (data.success) {
+        setResult({
+          detected_disease: data.disease,
+          confidence_score: data.confidence,
+          severity_level: data.severity || 'Unknown',
+          affected_part: 'Leaves',
+          treatment_advice: data.treatment_advice,
+          recommended_products: data.recommended_products || [],
+          prevention_tips: data.prevention_tips || []
+        });
+        
+        // Reload history after successful detection
+        loadHistory();
+      } else {
+        throw new Error(data.error || 'Analysis failed');
+      }
     } catch (error) {
       console.error('Error analyzing image:', error);
+      alert('Failed to analyze image. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -313,6 +360,90 @@ export default function DiseaseDetection() {
           )}
         </Card>
       </div>
+
+      {/* Recent Detections */}
+      <Card className="shadow-sm">
+        <div className="p-6">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 bg-purple-100 rounded-lg">
+              <History className="h-6 w-6 text-purple-600" />
+            </div>
+            <div>
+              <h2 className="text-xl font-semibold text-gray-900">Recent Detections</h2>
+              <p className="text-sm text-gray-600">Your previous disease scans</p>
+            </div>
+          </div>
+
+          {loadingHistory ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+            </div>
+          ) : history.length > 0 ? (
+            <div className="space-y-4">
+              {history.map((item) => {
+                const isHealthy = item.detected_disease.toLowerCase().includes('healthy');
+                const getDiseaseColor = () => {
+                  if (isHealthy) return 'bg-green-100 text-green-800 border-green-200';
+                  if (item.detected_disease.toLowerCase().includes('rust')) return 'bg-orange-100 text-orange-800 border-orange-200';
+                  if (item.detected_disease.toLowerCase().includes('powdery')) return 'bg-purple-100 text-purple-800 border-purple-200';
+                  return 'bg-gray-100 text-gray-800 border-gray-200';
+                };
+
+                return (
+                  <div key={item.id} className="p-4 border rounded-lg hover:bg-gray-50 transition-colors">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <Bug className="h-4 w-4 text-gray-500" />
+                        <span className={`px-3 py-1 rounded-full text-sm font-medium border ${getDiseaseColor()}`}>
+                          {item.detected_disease}
+                        </span>
+                      </div>
+                      <Badge variant="secondary" className="text-xs">
+                        {(item.confidence_score * 100).toFixed(0)}%
+                      </Badge>
+                    </div>
+                    
+                    <div className="text-xs text-gray-500 mb-2 flex items-center gap-1">
+                      <Calendar className="h-3 w-3" />
+                      {new Date(item.created_at).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
+                    </div>
+                    
+                    <div className="flex items-center gap-2 mt-2">
+                      <div className="flex-1 bg-gray-200 rounded-full h-2">
+                        <div
+                          className={`h-2 rounded-full transition-all ${
+                            isHealthy ? 'bg-green-600' : 'bg-red-600'
+                          }`}
+                          style={{ width: `${item.confidence_score * 100}%` }}
+                        />
+                      </div>
+                      <span className="text-xs font-medium text-gray-700">
+                        {isHealthy ? (
+                          <CheckCircle className="h-4 w-4 text-green-600 inline" />
+                        ) : (
+                          <AlertTriangle className="h-4 w-4 text-red-600 inline" />
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="text-center py-12 text-gray-500">
+              <History className="h-16 w-16 mx-auto mb-4 opacity-30" />
+              <h3 className="text-lg font-medium mb-2">No detections yet</h3>
+              <p className="text-sm">Start scanning your plants above</p>
+            </div>
+          )}
+        </div>
+      </Card>
     </div>
   );
 }

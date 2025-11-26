@@ -12,6 +12,9 @@ import CropRecommendation from "./pages/CropRecommendation";
 import DiseaseDetection from "./pages/DiseaseDetection";
 import WeatherDashboard from "./pages/WeatherDashboard";
 import Chatbot from "./pages/Chatbot";
+import Profile from "./pages/Profile";
+import FertilizerGuide from "./pages/FertilizerGuide";
+import YieldPrediction from "./pages/YieldPrediction";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -47,9 +50,10 @@ const App = () => (
               <Route path="crop-recommendation" element={<CropRecommendation />} />
               <Route path="disease-detection" element={<DiseaseDetection />} />
               <Route path="weather" element={<WeatherDashboard />} />
-              <Route path="fertilizer" element={<div className="p-8 text-center text-gray-500">Fertilizer Guide page coming soon...</div>} />
-              <Route path="yield-prediction" element={<div className="p-8 text-center text-gray-500">Yield Prediction page coming soon...</div>} />
+              <Route path="fertilizer" element={<FertilizerGuide />} />
+              <Route path="yield-prediction" element={<YieldPrediction />} />
               <Route path="chatbot" element={<Chatbot />} />
+              <Route path="profile" element={<Profile />} />
             </Route>
 
             {/* 404 route */}

@@ -94,17 +94,27 @@ export default function Dashboard() {
 
   const fetchWeatherData = async () => {
     try {
-      // For demo purposes, using Kigali coordinates. In production, you'd get user's location
-      const lat = -1.9441
-      const lon = 30.0619
-      const apiKey = 'YOUR_OPENWEATHER_API_KEY' // This should come from environment variables
+      // Use the weather service to get real weather data
+      const { weatherService } = await import('../lib/weather-service')
       
-      // Note: This is a placeholder. You'll need to add the API key to your .env file
-      // const response = await fetch(
-      //   `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${apiKey}&units=metric`
-      // )
+      // Get weather for Kigali by default
+      const data = await weatherService.getCurrentWeatherByCity('Kigali')
       
-      // For now, showing mock data since API key needs to be configured
+      setWeather({
+        temperature: data.temperature,
+        humidity: data.humidity,
+        windSpeed: Math.round(data.wind_speed * 3.6), // Convert m/s to km/h
+        pressure: data.pressure,
+        visibility: data.visibility,
+        description: data.weather_description,
+        icon: data.weather_icon,
+        location: data.location
+      })
+      setLoading(false)
+    } catch (error) {
+      console.error('Error fetching weather:', error)
+      setWeatherError('Unable to fetch weather data')
+      // Fallback to mock data if API fails
       setWeather({
         temperature: 24,
         humidity: 65,
@@ -115,9 +125,6 @@ export default function Dashboard() {
         icon: '02d',
         location: 'Kigali, Rwanda'
       })
-      setLoading(false)
-    } catch (error) {
-      setWeatherError('Unable to fetch weather data')
       setLoading(false)
     }
   }
