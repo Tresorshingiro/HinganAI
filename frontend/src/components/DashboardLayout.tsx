@@ -16,7 +16,8 @@ import {
   X,
   ChevronDown,
   Settings,
-  Bell
+  Bell,
+  Shield
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -139,6 +140,19 @@ export function DashboardLayout() {
                         <User className="h-4 w-4" />
                         My Profile
                       </Link>
+                      
+                      {/* Admin Portal Link - Only show to admin users */}
+                      {profile?.is_admin && (
+                        <Link
+                          to="/admin"
+                          onClick={() => setProfileDropdownOpen(false)}
+                          className="w-full flex items-center gap-3 px-4 py-2 text-sm text-emerald-700 hover:bg-emerald-50 transition-colors font-medium"
+                        >
+                          <Shield className="h-4 w-4" />
+                          Admin Portal
+                        </Link>
+                      )}
+                      
                       <button className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors">
                         <Settings className="h-4 w-4" />
                         Settings

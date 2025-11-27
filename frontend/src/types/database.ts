@@ -8,6 +8,7 @@ export interface UserProfile {
   primary_crops?: string[];
   phone_number?: string;
   avatar_url?: string;
+  is_admin?: boolean;
   created_at: string;
   updated_at: string;
 }

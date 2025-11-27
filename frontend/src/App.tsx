@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ProtectedRoute, PublicRoute } from '@/components/ProtectedRoute';
 import { DashboardLayout } from '@/components/DashboardLayout';
+import { AdminLayout } from '@/components/admin/AdminLayout';
 import Index from "./pages/Index";
 import { LoginPage } from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
@@ -15,6 +16,9 @@ import Chatbot from "./pages/Chatbot";
 import Profile from "./pages/Profile";
 import FertilizerGuide from "./pages/FertilizerGuide";
 import YieldPrediction from "./pages/YieldPrediction";
+import AdminDashboard from "./pages/admin/Dashboard";
+import AdminUsers from "./pages/admin/Users";
+import AdminPredictions from "./pages/admin/Predictions";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -54,6 +58,21 @@ const App = () => (
               <Route path="yield-prediction" element={<YieldPrediction />} />
               <Route path="chatbot" element={<Chatbot />} />
               <Route path="profile" element={<Profile />} />
+            </Route>
+
+            {/* Admin routes */}
+            <Route 
+              path="/admin" 
+              element={
+                <ProtectedRoute>
+                  <AdminLayout />
+                </ProtectedRoute>
+              }
+            >
+              <Route index element={<AdminDashboard />} />
+              <Route path="dashboard" element={<AdminDashboard />} />
+              <Route path="users" element={<AdminUsers />} />
+              <Route path="predictions" element={<AdminPredictions />} />
             </Route>
 
             {/* 404 route */}
