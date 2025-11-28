@@ -104,7 +104,7 @@ export const Footer = () => {
 
         {/* Bottom */}
         <div className="pt-8 border-t border-gray-800 text-center text-sm text-gray-400">
-          <p>&copy; 2024 HinganAI. All rights reserved. Made with 💚 for farmers worldwide.</p>
+          <p>&copy; 2025 HinganAI. All rights reserved. Made for farmers worldwide.</p>
         </div>
       </div>
     </footer>
